@@ -1,5 +1,8 @@
 package fhirspark;
 
+import ca.uhn.fhir.rest.server.exceptions.ResourceGoneException;
+import ca.uhn.fhir.rest.server.exceptions.ResourceNotFoundException;
+import ca.uhn.fhir.rest.server.exceptions.UnprocessableEntityException;
 import com.fasterxml.jackson.core.JsonFactory;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -10,21 +13,15 @@ import fhirspark.adapter.SpecimenAdapter;
 import fhirspark.adapter.TherapyRecommendationAdapter;
 import fhirspark.resolver.HgncGeneName;
 import fhirspark.resolver.OncoKbDrug;
-import fhirspark.restmodel.CbioportalRest;
-import fhirspark.restmodel.Deletions;
-import fhirspark.restmodel.FollowUp;
-import fhirspark.restmodel.GeneticAlteration;
-import fhirspark.restmodel.Mtb;
+import fhirspark.restmodel.*;
 import fhirspark.settings.ConfigurationLoader;
 import fhirspark.settings.Settings;
-
 import org.apache.log4j.BasicConfigurator;
 import org.eclipse.jetty.http.HttpStatus;
 import spark.Request;
 import spark.Response;
 
 import javax.ws.rs.core.Cookie;
-
 import java.io.FileInputStream;
 import java.io.InputStream;
 import java.time.LocalDateTime;
@@ -34,12 +31,7 @@ import java.util.List;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-import static spark.Spark.delete;
-import static spark.Spark.get;
-import static spark.Spark.options;
-import static spark.Spark.port;
-import static spark.Spark.post;
-import static spark.Spark.put;
+import static spark.Spark.*;
 
 /**
  * Fhirspark-Application that stores MTB decisions from cBioPortal and is able
@@ -83,14 +75,19 @@ public final class FhirSpark {
         });
 
         /**
-        *
-        * Checks whether the client has permission to view and manipulate the data of the given patientId
-        *
-        * @param req Incoming Java Spark Request
-        * @param patientId requested patientId
-        * @return FORBIDDEN_403 if not authorized
-        * @return ACCEPTED_202 if authorized
-        */
+         *
+         * Checks whether the client has permission to view and manipulate the data of the given patientId
+         *
+         * @param req Incoming Java Spark Request
+         * @param patientId requested patientId
+         * @return FORBIDDEN_403 if not authorized
+         * @return ACCEPTED_202 if authorized
+         */
+        options("/mtb/:patientId/permission", (req, res) -> {
+            addOptions(req, res);
+            res.header("Access-Control-Allow-Methods", "GET, PUT, DELETE");
+            return res;
+        });
 
         get("/mtb/:patientId/permission", (req, res) -> {
             if (settings.getLoginRequired()) {
@@ -267,6 +264,81 @@ public final class FhirSpark {
                     objectMapper.writeValueAsString(jsonFhirMapper
                         .getFollowUpsByAlteration(alterations)));
             return res.body();
+        });
+
+        options("/presentation/image", (req, res) -> {
+            addOptions(req, res);
+            res.header("Access-Control-Allow-Methods", "POST");
+            return res;
+        });
+
+        post("/presentation/image", (request, response) -> {
+            response.status(HttpStatus.OK_200);
+            addContent(request, response);
+
+            Image image = objectMapper.readValue(request.body(), Image.class);
+
+            try {
+                return jsonFhirMapper.uploadImage(image);
+            } catch (UnprocessableEntityException e) {
+                response.status(HttpStatus.UNPROCESSABLE_ENTITY_422);
+                return "unprocessable entity";
+            }
+        });
+
+        get("/presentation/:patientId", (request, response) -> {
+            response.status(HttpStatus.OK_200);
+            addContent(request, response);
+
+            var patientId = request.params(":patientId");
+
+            try {
+                response.body(jsonFhirMapper.loadPresentation(patientId));
+                return response.body();
+            } catch (ResourceGoneException | ResourceNotFoundException e) {
+                response.status(HttpStatus.NOT_FOUND_404);
+                System.out.println(e.getMessage());
+                response.body("not found");
+                return response.body();
+            } catch (UnprocessableEntityException e) {
+                response.status(HttpStatus.INTERNAL_SERVER_ERROR_500);
+                response.body("multiple matches for identifier found");
+                System.out.println(e.getMessage());
+                return response.body();
+            }
+        });
+
+        post("/presentation/:patientId", (request, response) -> {
+            response.status(HttpStatus.OK_200);
+            addContent(request, response);
+
+            var presentation = objectMapper.readValue(request.body(), PresentationRequest.class);
+            var patientId = request.params(":patientId");
+
+            try {
+                jsonFhirMapper.savePresentation(patientId, presentation);
+                response.body("ok");
+                return response.body();
+            } catch (UnprocessableEntityException e) {
+                response.status(HttpStatus.UNPROCESSABLE_ENTITY_422);
+                response.body("unprocessable entity");
+                return response.body();
+            }
+        });
+
+        delete("/presentation/:patientId", (request, response) -> {
+            response.status(HttpStatus.NO_CONTENT_204);
+            addContent(request, response);
+
+            var patientId = request.params(":patientId");
+
+            try {
+                jsonFhirMapper.deletePresentation(patientId);
+                return response;
+            } catch (UnprocessableEntityException e) {
+                response.status(HttpStatus.UNPROCESSABLE_ENTITY_422);
+                return "unprocessable entity";
+            }
         });
     }
 
