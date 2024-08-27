@@ -312,7 +312,7 @@ public final class FhirSpark {
             response.status(HttpStatus.OK_200);
             addContent(request, response);
 
-            var presentation = objectMapper.readValue(request.body(), PresentationRequest.class);
+            var presentation = objectMapper.readValue(request.body(), PresentationViewModel.class);
             var patientId = request.params(":patientId");
 
             try {

@@ -247,10 +247,10 @@ public class JsonFhirMapper {
         return objectMapper.writeValueAsString(response);
     }
 
-    public void savePresentation(final String patientId, final PresentationRequest presentation) {
+    public void savePresentation(final String patientId, final PresentationViewModel presentation) {
         var bundle = createTransactionBundle();
         var presentationResource = createPresentationResource();
-        var nodes = createNodesForPresentationFromRequest(presentation);
+        var nodes = createNodesForPresentationFromViewModel(presentation);
 
         addPatientIdIdentifier(presentationResource, patientId);
         presentationResource.setNodes(nodes);
@@ -280,7 +280,7 @@ public class JsonFhirMapper {
         identifier.getType().addCoding(Hl7TerminologyEnum.MR.toCoding());
     }
 
-    private List<Presentation.Node> createNodesForPresentationFromRequest(final PresentationRequest presentationRequest) {
+    private List<Presentation.Node> createNodesForPresentationFromViewModel(final PresentationViewModel presentationRequest) {
         return presentationRequest.slides().entrySet().stream().flatMap(slide -> {
             var slideId = slide.getKey();
             var nodesInSlide = slide.getValue();
@@ -306,31 +306,61 @@ public class JsonFhirMapper {
     }
 
     public String loadPresentation(final String patientId) throws ResourceNotFoundException, ResourceGoneException, UnprocessableEntityException, JsonProcessingException {
-        Bundle bundle = client.search().forResource(Presentation.class).where(new TokenClientParam("identifier").exactly().systemAndCode(patientUri, patientId)).returnBundle(Bundle.class).execute();
+        var bundle = findPresentationByPatientId(patientId);
 
-        if (bundle.getEntry().size() > 1) {
+        if (hasMultipleMatches(bundle)) {
             throw new UnprocessableEntityException("identifier has multiple matches");
         }
 
-        var presentation = (Presentation) bundle.getEntryFirstRep().getResource();
-        var map = presentation.getNodes().stream().collect(Collectors.groupingBy(node -> node.getSlideId().getValue()));
-        var responseMap = new HashMap<UUID, List<SlideNode>>();
-        map.entrySet().forEach(slide -> {
-            var slideId = slide.getKey();
-            var nodes = slide.getValue();
-            var slideNodes = nodes.stream().map(node -> new SlideNode(node.getNodeId().getValue(), new Position(node.getLeft().getValue().longValue(), node.getTop().getValue().longValue()), NodeType.valueOf(node.getType().getValue()), node.getValue().getValue())).toList();
-            responseMap.put(UUID.fromString(slideId), slideNodes);
-        });
-        var response = new PresentationRequest(responseMap);
+        var presentation = getPresentationFromBundle(bundle);
 
-        return objectMapper.writeValueAsString(response);
+        if(presentation == null) {
+            throw new ResourceNotFoundException("no presentation for patentid found");
+        }
+
+        var viewModel = createViewModelFromPresentation(presentation);
+
+        return toJSON(viewModel);
+    }
+
+    private String toJSON(PresentationViewModel viewModel) throws JsonProcessingException {
+        return objectMapper.writeValueAsString(viewModel);
+    }
+
+    private static boolean hasMultipleMatches(Bundle bundle) {
+        return bundle.getEntry().size() > 1;
+    }
+
+    private Bundle findPresentationByPatientId(final String patientId) {
+        return client.search()
+            .forResource(Presentation.class)
+            .where(new TokenClientParam("identifier").exactly().systemAndCode(patientUri, patientId))
+            .returnBundle(Bundle.class).execute();
+    }
+
+    private Presentation getPresentationFromBundle(Bundle bundle) {
+        return (Presentation) bundle.getEntryFirstRep().getResource();
+    }
+
+    private PresentationViewModel createViewModelFromPresentation(Presentation presentation) {
+        var nodesGroupedBySlideId = presentation.getNodes().stream().collect(Collectors.groupingBy(node -> node.getSlideId().getValue()));
+        var slides = new HashMap<UUID, List<SlideNode>>();
+        nodesGroupedBySlideId.forEach((slideId, nodes) -> {
+            var slideNodes = nodes.stream().map(node -> new SlideNode(node.getNodeId().getValue(), new Position(node.getLeft().getValue().longValue(), node.getTop().getValue().longValue()), NodeType.valueOf(node.getType().getValue()), node.getValue().getValue())).toList();
+            slides.put(UUID.fromString(slideId), slideNodes);
+        });
+        return new PresentationViewModel(slides);
     }
 
     public void deletePresentation(final String patientId) {
-        var basic = new Basic();
-        basic.setId(new IdType("Basic", patientId));
+        var bundle = new Bundle();
+        var presentation = new Presentation();
+        addPatientIdIdentifier(presentation, patientId);
 
-        client.delete().resource(basic).execute();
+        bundle.addEntry().setFullUrl(presentation.getIdElement().getValue()).setResource(presentation).getRequest()
+            .setUrl("Basic?identifier=" + patientUri + "|" + patientId)
+            .setMethod(Bundle.HTTPVerb.DELETE);
+        client.transaction().withBundle(bundle).execute();
     }
 
     /**
