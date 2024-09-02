@@ -81,6 +81,10 @@ public class JsonFhirMapper {
 
     }
 
+    private static boolean hasMultipleMatches(Bundle bundle) {
+        return bundle.getEntry().size() > 1;
+    }
+
     /**
      * Retrieves MTB data from FHIR server and transforms it into JSON format for
      * cBioPortal.
@@ -275,7 +279,7 @@ public class JsonFhirMapper {
 
     private void addPatientIdIdentifier(final Basic resource, final String patientId) {
         var identifier = resource.addIdentifier();
-        identifier.setSystem(patientUri).setValue(patientId);
+        identifier.setSystem(patientUri).setValue("presentation_" + patientId);
         identifier.setUse(IdentifierUse.OFFICIAL);
         identifier.getType().addCoding(Hl7TerminologyEnum.MR.toCoding());
     }
@@ -289,14 +293,16 @@ public class JsonFhirMapper {
                 new StringType(node.id()),
                 new IntegerType(node.position().left()),
                 new IntegerType(node.position().top()),
+                node.position().width() == null ? null :new IntegerType(node.position().width()),
                 new StringType(node.type().toString()),
                 new StringType(node.value())));
         }).toList();
     }
 
     private void setupBundleEntry(final Bundle bundle, final Presentation presentation, final String patientId) {
+        var identifier = presentation.getIdentifierFirstRep();
         bundle.addEntry().setFullUrl(presentation.getIdElement().getValue()).setResource(presentation).getRequest()
-            .setUrl("Basic?identifier=" + patientUri + "|" + patientId)
+            .setUrl("Basic?identifier=" + identifier.getSystem() + "|" + identifier.getValue())
             .setMethod(Bundle.HTTPVerb.PUT);
 
     }
@@ -314,7 +320,7 @@ public class JsonFhirMapper {
 
         var presentation = getPresentationFromBundle(bundle);
 
-        if(presentation == null) {
+        if (presentation == null) {
             throw new ResourceNotFoundException("no presentation for patentid found");
         }
 
@@ -327,14 +333,11 @@ public class JsonFhirMapper {
         return objectMapper.writeValueAsString(viewModel);
     }
 
-    private static boolean hasMultipleMatches(Bundle bundle) {
-        return bundle.getEntry().size() > 1;
-    }
-
     private Bundle findPresentationByPatientId(final String patientId) {
+        var prefixedPatientId = "presentation_" + patientId;
         return client.search()
             .forResource(Presentation.class)
-            .where(new TokenClientParam("identifier").exactly().systemAndCode(patientUri, patientId))
+            .where(new TokenClientParam("identifier").exactly().systemAndCode(patientUri, prefixedPatientId))
             .returnBundle(Bundle.class).execute();
     }
 
@@ -346,7 +349,7 @@ public class JsonFhirMapper {
         var nodesGroupedBySlideId = presentation.getNodes().stream().collect(Collectors.groupingBy(node -> node.getSlideId().getValue()));
         var slides = new HashMap<UUID, List<SlideNode>>();
         nodesGroupedBySlideId.forEach((slideId, nodes) -> {
-            var slideNodes = nodes.stream().map(node -> new SlideNode(node.getNodeId().getValue(), new Position(node.getLeft().getValue().longValue(), node.getTop().getValue().longValue()), NodeType.valueOf(node.getType().getValue()), node.getValue().getValue())).toList();
+            var slideNodes = nodes.stream().map(node -> new SlideNode(node.getNodeId().getValue(), new Position(node.getLeft().getValue().longValue(), node.getTop().getValue().longValue(), node.getWidth().getValue() != null ? node.getWidth().getValue().longValue() : null), NodeType.valueOf(node.getType().getValue()), node.getValue().getValue())).toList();
             slides.put(UUID.fromString(slideId), slideNodes);
         });
         return new PresentationViewModel(slides);
@@ -358,7 +361,7 @@ public class JsonFhirMapper {
         addPatientIdIdentifier(presentation, patientId);
 
         bundle.addEntry().setFullUrl(presentation.getIdElement().getValue()).setResource(presentation).getRequest()
-            .setUrl("Basic?identifier=" + patientUri + "|" + patientId)
+            .setUrl("Basic?identifier=" + patientUri + "|presentation_" + patientId)
             .setMethod(Bundle.HTTPVerb.DELETE);
         client.transaction().withBundle(bundle).execute();
     }

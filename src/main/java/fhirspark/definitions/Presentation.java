@@ -59,6 +59,10 @@ public class Presentation extends Basic {
         @Extension(url = "http://example.com/StructureDefinition/mtb-presentation-node-top", definedLocally = false)
         private IntegerType top;
 
+        @Child(name = "width")
+        @Extension(url = "http://example.com/StructureDefinition/mtb-presentation-node-width", definedLocally = false)
+        private IntegerType width;
+
         @Child(name = "type")
         @Extension(url = "http://example.com/StructureDefinition/mtb-presentation-node-type", definedLocally = false)
         private StringType type;
@@ -71,24 +75,25 @@ public class Presentation extends Basic {
             super();
         }
 
-        public Node(StringType slideId, StringType nodeId, IntegerType left, IntegerType top, StringType type, StringType value) {
+        public Node(StringType slideId, StringType nodeId, IntegerType left, IntegerType top, IntegerType width, StringType type, StringType value) {
             super();
             this.slideId = slideId;
             this.nodeId = nodeId;
             this.left = left;
             this.top = top;
+            this.width = width;
             this.type = type;
             this.value = value;
         }
 
         @Override
         public Node copy() {
-            return new Node(slideId, nodeId, left, top, type, value);
+            return new Node(slideId, nodeId, left, top, width, type, value);
         }
 
         @Override
         public boolean isEmpty() {
-            return super.isEmpty() && ElementUtil.isEmpty(slideId, nodeId, left, top, type, value);
+            return super.isEmpty() && ElementUtil.isEmpty(slideId, nodeId, left, top, width, type, value);
         }
 
         public StringType getSlideId() {
@@ -135,6 +140,18 @@ public class Presentation extends Basic {
 
         public void setTop(IntegerType top) {
             this.top = top;
+        }
+
+        public IntegerType getWidth() {
+            if (width == null) {
+                return new IntegerType();
+            }
+
+            return width;
+        }
+
+        public void setWidth(IntegerType width) {
+            this.width = width;
         }
 
         public StringType getType() {

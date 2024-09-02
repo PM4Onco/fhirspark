@@ -1,4 +1,4 @@
 package fhirspark.restmodel;
 
-public record Position(Long left, Long top) {
+public record Position(Long left, Long top, Long width) {
 }
