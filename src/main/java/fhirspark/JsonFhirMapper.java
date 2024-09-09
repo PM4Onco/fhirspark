@@ -289,7 +289,7 @@ public class JsonFhirMapper {
             var slideId = slide.getKey();
             var nodesInSlide = slide.getValue();
             return nodesInSlide.stream().map(node -> new Presentation.Node(
-                new StringType(slideId.toString()),
+                new IntegerType(slideId),
                 new StringType(node.id()),
                 new IntegerType(node.position().left()),
                 new IntegerType(node.position().top()),
@@ -347,10 +347,10 @@ public class JsonFhirMapper {
 
     private PresentationViewModel createViewModelFromPresentation(Presentation presentation) {
         var nodesGroupedBySlideId = presentation.getNodes().stream().collect(Collectors.groupingBy(node -> node.getSlideId().getValue()));
-        var slides = new HashMap<UUID, List<SlideNode>>();
+        var slides = new HashMap<Integer, List<SlideNode>>();
         nodesGroupedBySlideId.forEach((slideId, nodes) -> {
             var slideNodes = nodes.stream().map(node -> new SlideNode(node.getNodeId().getValue(), new Position(node.getLeft().getValue().longValue(), node.getTop().getValue().longValue(), node.getWidth().getValue() != null ? node.getWidth().getValue().longValue() : null), NodeType.valueOf(node.getType().getValue()), node.getValue().getValue())).toList();
-            slides.put(UUID.fromString(slideId), slideNodes);
+            slides.put(slideId, slideNodes);
         });
         return new PresentationViewModel(slides);
     }

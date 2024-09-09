@@ -45,7 +45,7 @@ public class Presentation extends Basic {
 
         @Child(name = "slideId")
         @Extension(url = "http://example.com/StructureDefinition/mtb-presentation-slide-id", definedLocally = false)
-        private StringType slideId;
+        private IntegerType slideId;
 
         @Child(name = "nodeId")
         @Extension(url = "http://example.com/StructureDefinition/mtb-presentation-node-id", definedLocally = false)
@@ -75,7 +75,7 @@ public class Presentation extends Basic {
             super();
         }
 
-        public Node(StringType slideId, StringType nodeId, IntegerType left, IntegerType top, IntegerType width, StringType type, StringType value) {
+        public Node(IntegerType slideId, StringType nodeId, IntegerType left, IntegerType top, IntegerType width, StringType type, StringType value) {
             super();
             this.slideId = slideId;
             this.nodeId = nodeId;
@@ -96,14 +96,14 @@ public class Presentation extends Basic {
             return super.isEmpty() && ElementUtil.isEmpty(slideId, nodeId, left, top, width, type, value);
         }
 
-        public StringType getSlideId() {
+        public IntegerType getSlideId() {
             if (slideId == null) {
-                return new StringType();
+                return new IntegerType();
             }
             return slideId;
         }
 
-        public void setSlideId(StringType slideId) {
+        public void setSlideId(IntegerType slideId) {
             this.slideId = slideId;
         }
 
