@@ -9,4 +9,6 @@ public enum NodeType {
     TEXT,
     @JsonProperty("html")
     HTML,
+    @JsonProperty("mutationTable")
+    MUTATION_TABLE
 }
