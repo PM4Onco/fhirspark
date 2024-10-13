@@ -18,7 +18,18 @@ import fhirspark.definitions.GenomicsReportingEnum;
 import fhirspark.definitions.Hl7TerminologyEnum;
 import fhirspark.definitions.Presentation;
 import fhirspark.definitions.UriEnum;
-import fhirspark.restmodel.*;
+import fhirspark.restmodel.CbioportalRest;
+import fhirspark.restmodel.Deletions;
+import fhirspark.restmodel.FollowUp;
+import fhirspark.restmodel.GeneticAlteration;
+import fhirspark.restmodel.Image;
+import fhirspark.restmodel.ImageResponse;
+import fhirspark.restmodel.Mtb;
+import fhirspark.restmodel.NodeType;
+import fhirspark.restmodel.Position;
+import fhirspark.restmodel.PresentationViewModel;
+import fhirspark.restmodel.SlideNode;
+import fhirspark.restmodel.TherapyRecommendation;
 import fhirspark.settings.Settings;
 import java.io.FileWriter;
 import java.io.IOException;
@@ -31,16 +42,34 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import org.hl7.fhir.instance.model.api.IAnyResource;
-import org.hl7.fhir.r4.model.*;
+import org.hl7.fhir.r4.model.Basic;
+import org.hl7.fhir.r4.model.Binary;
+import org.hl7.fhir.r4.model.Bundle;
 import org.hl7.fhir.r4.model.Bundle.BundleEntryComponent;
-import org.hl7.fhir.r4.model.Reference;
+import org.hl7.fhir.r4.model.DiagnosticReport;
+import org.hl7.fhir.r4.model.IdType;
+import org.hl7.fhir.r4.model.Identifier;
 import org.hl7.fhir.r4.model.Identifier.IdentifierUse;
+import org.hl7.fhir.r4.model.IntegerType;
+import org.hl7.fhir.r4.model.MedicationStatement;
+import org.hl7.fhir.r4.model.Observation;
+import org.hl7.fhir.r4.model.Patient;
+import org.hl7.fhir.r4.model.Reference;
+import org.hl7.fhir.r4.model.RelatedArtifact;
 import org.hl7.fhir.r4.model.RelatedArtifact.RelatedArtifactType;
+import org.hl7.fhir.r4.model.StringType;
 
 import java.io.FileWriter;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.Comparator;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 /**
@@ -261,6 +290,7 @@ public class JsonFhirMapper {
         setupBundleEntry(bundle, presentationResource, patientId);
 
         executeBundleTransaction(bundle);
+        removeUnusedImages(patientId, presentation);
     }
 
     private Bundle createTransactionBundle() {
@@ -293,7 +323,7 @@ public class JsonFhirMapper {
                 new StringType(node.id()),
                 new IntegerType(node.position().left()),
                 new IntegerType(node.position().top()),
-                node.position().width() == null ? null :new IntegerType(node.position().width()),
+                node.position().width() == null ? null : new IntegerType(node.position().width()),
                 new StringType(node.type().toString()),
                 new StringType(node.value())));
         }).toList();
@@ -309,6 +339,16 @@ public class JsonFhirMapper {
 
     public void executeBundleTransaction(final Bundle bundle) {
         client.transaction().withBundle(bundle).execute();
+    }
+
+    private void removeUnusedImages(final String patientId, final PresentationViewModel presentation) {
+        var imagePaths = presentation.slides().values().stream().flatMap(Collection::stream).filter(node -> node.type() == NodeType.IMAGE).map(SlideNode::value).toList();
+
+        try (var client = new FileClient(settings.getFileServer(), settings.getBucket(), new Credentials(settings.getFileServerAccessKey(), settings.getFileServerSecretKey()))) {
+            client.removeUnusedImages(patientId, imagePaths);
+        } catch (Exception e) {
+            throw new RuntimeException(e);
+        }
     }
 
     public String loadPresentation(final String patientId) throws ResourceNotFoundException, ResourceGoneException, UnprocessableEntityException, JsonProcessingException {

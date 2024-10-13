@@ -285,14 +285,15 @@ public final class FhirSpark {
             return res;
         });
 
-        post("/presentation/image", (request, response) -> {
-            response.status(HttpStatus.OK_200);
+        post("/presentation/:patientId/image", (request, response) -> {
             addContent(request, response);
+
+            var patientId = request.params(":patientId");
 
             Image image = objectMapper.readValue(request.body(), Image.class);
 
-            try (var fileUploader = new FileUploader(settings.getFileServer(), settings.getBucket(), new Credentials(settings.getFileServerAccessKey(), settings.getFileServerSecretKey()))) {
-                var filePath = fileUploader.uploadImage(image);
+            try (var fileUploader = new FileClient(settings.getFileServer(), settings.getBucket(), new Credentials(settings.getFileServerAccessKey(), settings.getFileServerSecretKey()))) {
+                var filePath = fileUploader.uploadImage(image, patientId);
 
                 var imageResponse = new ImageResponse(filePath, image.contentType().display());
 
