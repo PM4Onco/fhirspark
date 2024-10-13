@@ -13,9 +13,17 @@ import fhirspark.adapter.SpecimenAdapter;
 import fhirspark.adapter.TherapyRecommendationAdapter;
 import fhirspark.resolver.HgncGeneName;
 import fhirspark.resolver.OncoKbDrug;
-import fhirspark.restmodel.*;
+import fhirspark.restmodel.CbioportalRest;
+import fhirspark.restmodel.Deletions;
+import fhirspark.restmodel.FollowUp;
+import fhirspark.restmodel.GeneticAlteration;
+import fhirspark.restmodel.Image;
+import fhirspark.restmodel.ImageResponse;
+import fhirspark.restmodel.Mtb;
+import fhirspark.restmodel.PresentationViewModel;
 import fhirspark.settings.ConfigurationLoader;
 import fhirspark.settings.Settings;
+import io.minio.errors.MinioException;
 import org.apache.log4j.BasicConfigurator;
 import org.eclipse.jetty.http.HttpStatus;
 import spark.Request;
@@ -31,7 +39,12 @@ import java.util.List;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-import static spark.Spark.*;
+import static spark.Spark.delete;
+import static spark.Spark.get;
+import static spark.Spark.options;
+import static spark.Spark.port;
+import static spark.Spark.post;
+import static spark.Spark.put;
 
 /**
  * Fhirspark-Application that stores MTB decisions from cBioPortal and is able
@@ -159,11 +172,11 @@ public final class FhirSpark {
             res.status(HttpStatus.OK_200);
             addContent(req, res);
             List<GeneticAlteration> alterations = objectMapper.readValue(req.body(),
-                    new TypeReference<List<GeneticAlteration>>() {
-                    });
+                new TypeReference<List<GeneticAlteration>>() {
+                });
             res.body(
-                    objectMapper.writeValueAsString(jsonFhirMapper
-                        .getTherapyRecommendationsByAlteration(alterations)));
+                objectMapper.writeValueAsString(jsonFhirMapper
+                    .getTherapyRecommendationsByAlteration(alterations)));
             return res.body();
         });
 
@@ -177,8 +190,8 @@ public final class FhirSpark {
             res.status(HttpStatus.OK_200);
             addContent(req, res);
             List<GeneticAlteration> alterations = objectMapper.readValue(req.body(),
-                    new TypeReference<List<GeneticAlteration>>() {
-                    });
+                new TypeReference<List<GeneticAlteration>>() {
+                });
             res.body(objectMapper.writeValueAsString(jsonFhirMapper.getPmidsByAlteration(alterations)));
             return res.body();
         });
@@ -258,11 +271,11 @@ public final class FhirSpark {
             res.status(HttpStatus.OK_200);
             addContent(req, res);
             List<GeneticAlteration> alterations = objectMapper.readValue(req.body(),
-                    new TypeReference<List<GeneticAlteration>>() {
-                    });
+                new TypeReference<List<GeneticAlteration>>() {
+                });
             res.body(
-                    objectMapper.writeValueAsString(jsonFhirMapper
-                        .getFollowUpsByAlteration(alterations)));
+                objectMapper.writeValueAsString(jsonFhirMapper
+                    .getFollowUpsByAlteration(alterations)));
             return res.body();
         });
 
@@ -278,11 +291,17 @@ public final class FhirSpark {
 
             Image image = objectMapper.readValue(request.body(), Image.class);
 
-            try {
-                return jsonFhirMapper.uploadImage(image);
-            } catch (UnprocessableEntityException e) {
-                response.status(HttpStatus.UNPROCESSABLE_ENTITY_422);
-                return "unprocessable entity";
+            try (var fileUploader = new FileUploader(settings.getFileServer(), settings.getBucket(), new Credentials(settings.getFileServerAccessKey(), settings.getFileServerSecretKey()))) {
+                var filePath = fileUploader.uploadImage(image);
+
+                var imageResponse = new ImageResponse(filePath, image.contentType().display());
+
+                response.status(HttpStatus.CREATED_201);
+                return objectMapper.writeValueAsString(imageResponse);
+            } catch (MinioException e) {
+                System.out.println(e.getMessage());
+                response.status(HttpStatus.INTERNAL_SERVER_ERROR_500);
+                return "uploading image failed";
             }
         });
 
@@ -324,6 +343,12 @@ public final class FhirSpark {
                 response.body("unprocessable entity");
                 return response.body();
             }
+        });
+
+        options("/presentation/:patientId", (req, res) -> {
+            addOptions(req, res);
+            res.header("Access-Control-Allow-Methods", "DELETE");
+            return res;
         });
 
         delete("/presentation/:patientId", (request, response) -> {

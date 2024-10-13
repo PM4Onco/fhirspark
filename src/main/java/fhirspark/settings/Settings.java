@@ -59,6 +59,14 @@ public final class Settings {
     private String oncokbPath;
     @JsonProperty("regex")
     private List<Regex> regex;
+    @JsonProperty("fileServer")
+    private String fileServer;
+    @JsonProperty("fileServerAccessKey")
+    private String fileServerAccessKey;
+    @JsonProperty("fileServerSecretKey")
+    private String fileServerSecretKey;
+    @JsonProperty("bucket")
+    private String bucket;
 
     @JsonProperty("port")
     public Integer getPort() {
@@ -193,6 +201,26 @@ public final class Settings {
     @JsonProperty("regex")
     public List<Regex> getRegex() {
         return regex;
+    }
+
+    @JsonProperty("fileServer")
+    public String getFileServer() {
+        return fileServer;
+    }
+
+    @JsonProperty("fileServerAccessKey")
+    public String getFileServerAccessKey() {
+        return fileServerAccessKey;
+    }
+
+    @JsonProperty("fileServerSecretKey")
+    public String getFileServerSecretKey() {
+        return fileServerSecretKey;
+    }
+
+    @JsonProperty("bucket")
+    public String getBucket() {
+        return bucket;
     }
 
     @JsonProperty("regex")
