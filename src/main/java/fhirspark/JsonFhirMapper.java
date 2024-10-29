@@ -46,6 +46,7 @@ import org.hl7.fhir.r4.model.Basic;
 import org.hl7.fhir.r4.model.Binary;
 import org.hl7.fhir.r4.model.Bundle;
 import org.hl7.fhir.r4.model.Bundle.BundleEntryComponent;
+import org.hl7.fhir.r4.model.DecimalType;
 import org.hl7.fhir.r4.model.DiagnosticReport;
 import org.hl7.fhir.r4.model.IdType;
 import org.hl7.fhir.r4.model.Identifier;
@@ -324,6 +325,7 @@ public class JsonFhirMapper {
                 new IntegerType(node.position().left()),
                 new IntegerType(node.position().top()),
                 node.position().width() == null ? null : new IntegerType(node.position().width()),
+                node.position().scale() == null ? null : new DecimalType(node.position().scale()),
                 new StringType(node.type().toString()),
                 new StringType(node.value())));
         }).toList();
@@ -389,7 +391,7 @@ public class JsonFhirMapper {
         var nodesGroupedBySlideId = presentation.getNodes().stream().collect(Collectors.groupingBy(node -> node.getSlideId().getValue()));
         var slides = new HashMap<Integer, List<SlideNode>>();
         nodesGroupedBySlideId.forEach((slideId, nodes) -> {
-            var slideNodes = nodes.stream().map(node -> new SlideNode(node.getNodeId().getValue(), new Position(node.getLeft().getValue().longValue(), node.getTop().getValue().longValue(), node.getWidth().getValue() != null ? node.getWidth().getValue().longValue() : null), NodeType.valueOf(node.getType().getValue()), node.getValue().getValue())).toList();
+            var slideNodes = nodes.stream().map(node -> new SlideNode(node.getNodeId().getValue(), new Position(node.getLeft().getValue().longValue(), node.getTop().getValue().longValue(), node.getWidth().getValue() != null ? node.getWidth().getValue().longValue() : null, node.getScale().getValue() != null ? node.getScale().getValue().doubleValue() : null), NodeType.valueOf(node.getType().getValue()), node.getValue().getValue())).toList();
             slides.put(slideId, slideNodes);
         });
         return new PresentationViewModel(slides);

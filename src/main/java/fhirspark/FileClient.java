@@ -16,7 +16,9 @@ import io.minio.errors.XmlParserException;
 import io.minio.messages.DeleteError;
 import io.minio.messages.DeleteObject;
 import io.minio.messages.Item;
+import jakarta.servlet.http.HttpServletRequest;
 import org.apache.commons.codec.binary.Base64;
+import org.apache.commons.fileupload2.jakarta.servlet6.JakartaServletFileUpload;
 
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
@@ -52,7 +54,7 @@ public class FileClient implements AutoCloseable {
 
         var stream = this.convertImageToInputStream(image);
 
-        var fileName = patientId + "/" + UUID.randomUUID() + "." + image.contentType().getExtension();
+        var fileName = patientId + "/presentation/" + UUID.randomUUID() + "." + image.contentType().getExtension();
         this.client.putObject(PutObjectArgs.builder()
             .bucket(bucket)
             .contentType(image.contentType().display())
@@ -61,7 +63,7 @@ public class FileClient implements AutoCloseable {
             .build()
         );
 
-        return this.url + "/" + this.bucket + "/" + fileName;
+        return fullFilePath(fileName);
     }
 
     private InputStream convertImageToInputStream(Image image) {
@@ -70,6 +72,55 @@ public class FileClient implements AutoCloseable {
         var bytes = Base64.decodeBase64(image.data().substring(imageDataStartIndex));
 
         return new ByteArrayInputStream(bytes);
+    }
+
+    public String uploadFile(String patientId, HttpServletRequest request) throws IOException, ServerException, InsufficientDataException, ErrorResponseException, NoSuchAlgorithmException, InvalidKeyException, InvalidResponseException, XmlParserException, InternalException {
+        if (!bucketExists()) {
+            throw new RuntimeException("Bucket doesn't exist");
+        }
+
+        var upload = new JakartaServletFileUpload<>();
+        var iterator = upload.getItemIterator(request);
+
+        if (!iterator.hasNext()) {
+            throw new IOException("no file");
+        }
+
+        var item = iterator.next();
+        if (!item.getFieldName().equals("file")) {
+            throw new IOException("invalid field");
+        }
+
+        // read all bytes, directly using item.getInputStream().available() does not work
+        var bytes = item.getInputStream().readAllBytes();
+        var stream = new ByteArrayInputStream(bytes);
+
+        var fileName = patientId + "/resources/" + item.getName();
+
+        this.client.putObject(PutObjectArgs.builder()
+            .bucket(bucket)
+            .contentType(item.getContentType())
+            .object(fileName)
+            .stream(stream, stream.available(), -1)
+            .build());
+
+        return fullFilePath(fileName);
+    }
+
+    public List<String> listFiles(String patientId) {
+        if (!bucketExists()) {
+            throw new RuntimeException("Bucket doesn't exist");
+        }
+
+        var objects = this.client.listObjects(ListObjectsArgs.builder().bucket(bucket).prefix(patientId + "/resources").recursive(true).build());
+
+        return StreamSupport.stream(objects.spliterator(), false).map(itemResult -> {
+            try {
+                return itemResult.get();
+            } catch (Exception e) {
+                throw new RuntimeException(e);
+            }
+        }).map(Item::objectName).map(this::fullFilePath).toList();
     }
 
     public boolean bucketExists() {
@@ -95,7 +146,7 @@ public class FileClient implements AutoCloseable {
     }
 
     private List<String> listImagesFor(String patientId) {
-        var filesForPatientId = this.client.listObjects(ListObjectsArgs.builder().bucket(this.bucket).prefix(patientId).recursive(true).build());
+        var filesForPatientId = this.client.listObjects(ListObjectsArgs.builder().bucket(this.bucket).prefix(patientId + "/presentation").recursive(true).build());
         return StreamSupport.stream(filesForPatientId.spliterator(), false).map(itemResult -> {
             try {
                 return itemResult.get();
@@ -114,6 +165,10 @@ public class FileClient implements AutoCloseable {
                 System.out.println(e.getMessage());
             }
         }
+    }
+
+    private String fullFilePath(String fileName) {
+        return this.url + "/" + this.bucket + "/" + fileName;
     }
 
     @Override

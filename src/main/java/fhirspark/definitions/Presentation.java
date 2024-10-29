@@ -7,6 +7,7 @@ import ca.uhn.fhir.model.api.annotation.ResourceDef;
 import ca.uhn.fhir.util.ElementUtil;
 import org.hl7.fhir.r4.model.BackboneElement;
 import org.hl7.fhir.r4.model.Basic;
+import org.hl7.fhir.r4.model.DecimalType;
 import org.hl7.fhir.r4.model.IntegerType;
 import org.hl7.fhir.r4.model.StringType;
 
@@ -63,6 +64,10 @@ public class Presentation extends Basic {
         @Extension(url = "http://example.com/StructureDefinition/mtb-presentation-node-width", definedLocally = false)
         private IntegerType width;
 
+        @Child(name = "scale")
+        @Extension(url = "http://example.com/StructureDefinition/mtb-presentation-node-scale", definedLocally = false)
+        private DecimalType scale;
+
         @Child(name = "type")
         @Extension(url = "http://example.com/StructureDefinition/mtb-presentation-node-type", definedLocally = false)
         private StringType type;
@@ -75,25 +80,26 @@ public class Presentation extends Basic {
             super();
         }
 
-        public Node(IntegerType slideId, StringType nodeId, IntegerType left, IntegerType top, IntegerType width, StringType type, StringType value) {
+        public Node(IntegerType slideId, StringType nodeId, IntegerType left, IntegerType top, IntegerType width, DecimalType scale, StringType type, StringType value) {
             super();
             this.slideId = slideId;
             this.nodeId = nodeId;
             this.left = left;
             this.top = top;
             this.width = width;
+            this.scale = scale;
             this.type = type;
             this.value = value;
         }
 
         @Override
         public Node copy() {
-            return new Node(slideId, nodeId, left, top, width, type, value);
+            return new Node(slideId, nodeId, left, top, width, scale, type, value);
         }
 
         @Override
         public boolean isEmpty() {
-            return super.isEmpty() && ElementUtil.isEmpty(slideId, nodeId, left, top, width, type, value);
+            return super.isEmpty() && ElementUtil.isEmpty(slideId, nodeId, left, top, width, scale, type, value);
         }
 
         public IntegerType getSlideId() {
@@ -152,6 +158,18 @@ public class Presentation extends Basic {
 
         public void setWidth(IntegerType width) {
             this.width = width;
+        }
+
+        public DecimalType getScale() {
+            if(scale == null) {
+                return new DecimalType();
+            }
+
+            return scale;
+        }
+
+        public void setScale(DecimalType scale) {
+            this.scale = scale;
         }
 
         public StringType getType() {

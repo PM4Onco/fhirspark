@@ -15,22 +15,30 @@ import fhirspark.resolver.HgncGeneName;
 import fhirspark.resolver.OncoKbDrug;
 import fhirspark.restmodel.CbioportalRest;
 import fhirspark.restmodel.Deletions;
+import fhirspark.restmodel.FileUploadLocation;
 import fhirspark.restmodel.FollowUp;
 import fhirspark.restmodel.GeneticAlteration;
 import fhirspark.restmodel.Image;
 import fhirspark.restmodel.ImageResponse;
 import fhirspark.restmodel.Mtb;
+import fhirspark.restmodel.PatientFileResources;
 import fhirspark.restmodel.PresentationViewModel;
 import fhirspark.settings.ConfigurationLoader;
 import fhirspark.settings.Settings;
 import io.minio.errors.MinioException;
+import org.apache.commons.fileupload2.jakarta.servlet6.JakartaServletFileUpload;
 import org.apache.log4j.BasicConfigurator;
 import org.eclipse.jetty.http.HttpStatus;
 import spark.Request;
 import spark.Response;
+import spark.embeddedserver.EmbeddedServers;
+import spark.embeddedserver.jetty.EmbeddedJettyServer;
+import spark.embeddedserver.jetty.JettyHandler;
+import spark.http.matching.MatcherFilter;
 
 import javax.ws.rs.core.Cookie;
 import java.io.FileInputStream;
+import java.io.IOException;
 import java.io.InputStream;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
@@ -67,6 +75,15 @@ public final class FhirSpark {
      * @throws Exception Exception if the REST API runs into issues.
      */
     public static void main(final String[] args) throws Exception {
+        EmbeddedServers.add(EmbeddedServers.Identifiers.JETTY, (routes, staticFilesConfiguration, exceptionMapper, b) -> {
+            var matcherFilter = new MatcherFilter(routes, staticFilesConfiguration, exceptionMapper, false, b);
+            matcherFilter.init(null);
+
+            var handler = new JettyHandler(matcherFilter);
+            var factory = new Factory();
+            return new EmbeddedJettyServer(factory, handler);
+        });
+
         BasicConfigurator.configure();
         InputStream settingsYaml = ClassLoader.getSystemClassLoader().getResourceAsStream("settings.yaml");
         if (args.length == 1) {
@@ -364,6 +381,45 @@ public final class FhirSpark {
             } catch (UnprocessableEntityException e) {
                 response.status(HttpStatus.UNPROCESSABLE_ENTITY_422);
                 return "unprocessable entity";
+            }
+        });
+
+        post("/resources/:patientId/upload", (request, response) -> {
+            if(settings.getLoginRequired() && !validateManipulation(request)) {
+                response.status(HttpStatus.FORBIDDEN_403);
+                return response;
+            }
+
+            addContent(request, response);
+
+            var patientId = request.params(":patientId");
+
+            if (!JakartaServletFileUpload.isMultipartContent(request.raw())) {
+                response.status(HttpStatus.BAD_REQUEST_400);
+                return "bad request";
+            }
+
+            try (var client = new FileClient(settings.getFileServer(), settings.getBucket(), new Credentials(settings.getFileServerAccessKey(), settings.getFileServerSecretKey()))) {
+                response.status(HttpStatus.CREATED_201);
+                return objectMapper.writeValueAsString(new FileUploadLocation(client.uploadFile(patientId, request.raw())));
+            } catch (MinioException | IOException e) {
+                System.out.println(e.getMessage());
+                response.status(HttpStatus.INTERNAL_SERVER_ERROR_500);
+                return "internal server error";
+            }
+        });
+
+        get("/resources/:patientId", (request, response) -> {
+            addContent(request, response);
+
+            var patientId = request.params(":patientId");
+
+            try (var client = new FileClient(settings.getFileServer(), settings.getBucket(), new Credentials(settings.getFileServerAccessKey(), settings.getFileServerSecretKey()))) {
+                return objectMapper.writeValueAsString(new PatientFileResources(client.listFiles(patientId)));
+            } catch (MinioException | IOException e) {
+                System.out.println(e.getMessage());
+                response.status(HttpStatus.INTERNAL_SERVER_ERROR_500);
+                return "internal server error";
             }
         });
     }
