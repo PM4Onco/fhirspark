@@ -1,5 +1,7 @@
 package fhirspark;
 
+import com.fasterxml.jackson.core.JsonParseException;
+import com.fasterxml.jackson.databind.JsonMappingException;
 import fhirspark.restmodel.Image;
 import io.minio.BucketExistsArgs;
 import io.minio.ListObjectsArgs;
@@ -150,7 +152,9 @@ public class FileClient implements AutoCloseable {
         return StreamSupport.stream(filesForPatientId.spliterator(), false).map(itemResult -> {
             try {
                 return itemResult.get();
-            } catch (Exception e) {
+            } catch (XmlParserException | ServerException | InvalidResponseException | InternalException |
+                     InsufficientDataException | ErrorResponseException | NoSuchAlgorithmException |
+                     InvalidKeyException | IllegalArgumentException | IOException e) {
                 throw new RuntimeException(e);
             }
         }).map(Item::objectName).toList();
@@ -161,7 +165,13 @@ public class FileClient implements AutoCloseable {
         for (Result<DeleteError> result : results) {
             try {
                 System.out.println(result.get());
-            } catch (Exception e) {
+            } catch (JsonParseException e) {
+                System.out.println(e.getMessage());
+            } catch (JsonMappingException e) {
+                System.out.println(e.getMessage());
+            } catch (ErrorResponseException | NoSuchAlgorithmException | InvalidKeyException |
+                     IllegalArgumentException | IOException | XmlParserException | ServerException |
+                     InvalidResponseException | InternalException | InsufficientDataException e) {
                 System.out.println(e.getMessage());
             }
         }

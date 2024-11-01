@@ -276,7 +276,10 @@ public class JsonFhirMapper {
             .setMethod(Bundle.HTTPVerb.POST);
 
         var bundledResponse = client.transaction().withBundle(bundle).execute();
-        var response = new ImageResponse(bundledResponse.getEntryFirstRep().getResponse().getLocation(), image.contentType().display());
+        var response = new ImageResponse(
+            bundledResponse.getEntryFirstRep().getResponse().getLocation(),
+            image.contentType().display()
+        );
 
         return objectMapper.writeValueAsString(response);
     }
