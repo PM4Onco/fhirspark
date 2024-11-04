@@ -178,7 +178,7 @@ public class FileClient implements AutoCloseable {
     }
 
     private String fullFilePath(String fileName) {
-        return this.url + "/" + this.bucket + "/" + fileName;
+        return "/" + this.bucket + "/" + fileName;
     }
 
     @Override
