@@ -137,8 +137,7 @@ public class FileClient implements AutoCloseable {
     }
 
     public void removeUnusedImages(String patientId, List<String> imagePaths) {
-        var serverPart = this.url + "/" + this.bucket + "/";
-        var filesOnServerAndInBucket = imagePaths.stream().filter(path -> path.startsWith(serverPart)).map(path -> path.replace(serverPart, "")).toList();
+        var filesOnServerAndInBucket = imagePaths.stream().filter(path -> path.matches("(https?:)?//.+?/"+ this.bucket + "/.*")).map(path -> path.replaceAll("(https?:)?//.+?/"+ this.bucket + "/", "")).toList();
         var uploadedFilesForPatientId = listImagesFor(patientId);
         var toRemove = new ArrayList<>(uploadedFilesForPatientId);
         toRemove.removeAll(filesOnServerAndInBucket);
