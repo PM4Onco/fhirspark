@@ -12,5 +12,7 @@ public enum NodeType {
     @JsonProperty("mutationTable")
     MUTATION_TABLE,
     @JsonProperty("timeline")
-    TIMELINE
+    TIMELINE,
+    @JsonProperty("therapyRecommendations")
+    THERAPY_RECOMMENDATIONS,
 }
