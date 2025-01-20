@@ -17,4 +17,6 @@ public enum NodeType {
     THERAPY_RECOMMENDATIONS,
     @JsonProperty("rectangle")
     RECTANGLE,
+    @JsonProperty("fusionTable")
+    FUSION_TABLE,
 }
