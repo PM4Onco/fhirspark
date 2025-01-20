@@ -15,4 +15,6 @@ public enum NodeType {
     TIMELINE,
     @JsonProperty("therapyRecommendations")
     THERAPY_RECOMMENDATIONS,
+    @JsonProperty("rectangle")
+    RECTANGLE,
 }

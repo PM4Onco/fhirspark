@@ -64,6 +64,10 @@ public class Presentation extends Basic {
         @Extension(url = "http://example.com/StructureDefinition/mtb-presentation-node-width", definedLocally = false)
         private IntegerType width;
 
+        @Child(name = "height")
+        @Extension(url = "http://example.com/StructureDefinition/mtb-presentation-node-height", definedLocally = false)
+        private IntegerType height;
+
         @Child(name = "scale")
         @Extension(url = "http://example.com/StructureDefinition/mtb-presentation-node-scale", definedLocally = false)
         private DecimalType scale;
@@ -80,13 +84,14 @@ public class Presentation extends Basic {
             super();
         }
 
-        public Node(IntegerType slideId, StringType nodeId, IntegerType left, IntegerType top, IntegerType width, DecimalType scale, StringType type, StringType value) {
+        public Node(IntegerType slideId, StringType nodeId, IntegerType left, IntegerType top, IntegerType width, IntegerType height, DecimalType scale, StringType type, StringType value) {
             super();
             this.slideId = slideId;
             this.nodeId = nodeId;
             this.left = left;
             this.top = top;
             this.width = width;
+            this.height = height;
             this.scale = scale;
             this.type = type;
             this.value = value;
@@ -94,12 +99,12 @@ public class Presentation extends Basic {
 
         @Override
         public Node copy() {
-            return new Node(slideId, nodeId, left, top, width, scale, type, value);
+            return new Node(slideId, nodeId, left, top, width, height, scale, type, value);
         }
 
         @Override
         public boolean isEmpty() {
-            return super.isEmpty() && ElementUtil.isEmpty(slideId, nodeId, left, top, width, scale, type, value);
+            return super.isEmpty() && ElementUtil.isEmpty(slideId, nodeId, left, top, width, height, scale, type, value);
         }
 
         public IntegerType getSlideId() {
@@ -158,6 +163,18 @@ public class Presentation extends Basic {
 
         public void setWidth(IntegerType width) {
             this.width = width;
+        }
+
+        public IntegerType getHeight() {
+            if (height == null) {
+                return new IntegerType();
+            }
+
+            return height;
+        }
+
+        public void setHeight(IntegerType height) {
+            this.height = height;
         }
 
         public DecimalType getScale() {
