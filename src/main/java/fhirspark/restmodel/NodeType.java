@@ -19,4 +19,6 @@ public enum NodeType {
     RECTANGLE,
     @JsonProperty("fusionTable")
     FUSION_TABLE,
+    @JsonProperty("cnaTable")
+    CNA_TABLE,
 }
