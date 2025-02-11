@@ -323,6 +323,14 @@ public final class FhirSpark {
             }
         });
 
+        get("/presentation", (request, response) -> {
+            response.status(HttpStatus.OK_200);
+            addContent(request, response);
+
+            response.body(jsonFhirMapper.getPresentationIds());
+            return response.body();
+        });
+
         get("/presentation/:patientId", (request, response) -> {
             response.status(HttpStatus.OK_200);
             addContent(request, response);
@@ -385,7 +393,7 @@ public final class FhirSpark {
         });
 
         post("/resources/:patientId/upload", (request, response) -> {
-            if(settings.getLoginRequired() && !validateManipulation(request)) {
+            if (settings.getLoginRequired() && !validateManipulation(request)) {
                 response.status(HttpStatus.FORBIDDEN_403);
                 return response;
             }

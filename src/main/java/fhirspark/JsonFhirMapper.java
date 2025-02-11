@@ -70,6 +70,8 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.NoSuchElementException;
+import java.util.Objects;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -354,6 +356,29 @@ public class JsonFhirMapper {
             client.removeUnusedImages(patientId, imagePaths);
         } catch (Exception e) {
             throw new RuntimeException(e);
+        }
+    }
+
+    public String getPresentationIds() {
+        var bundle = client.search()
+            .forResource(Presentation.class)
+            .returnBundle(Bundle.class).execute();
+
+        var entries = bundle.getEntry().stream().map(entry -> {
+            try {
+                return ((Basic) entry.getResource()).getIdentifier().getFirst().getValue();
+            } catch (NoSuchElementException e) {
+                return null;
+            }
+        }).filter(Objects::nonNull).map(id -> {
+            var parts = id.split("_");
+            return parts[parts.length - 1];
+        }).toList();
+
+        try {
+            return objectMapper.writeValueAsString(entries);
+        } catch (JsonProcessingException e) {
+            return "";
         }
     }
 
