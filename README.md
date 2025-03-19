@@ -1,8 +1,8 @@
 # FhirSpark
 
-FhirSpark is a tool that offers a reversible translation between the JSON sent via REST from [MIRACUM-cBioPortal](https://github.com/buschlab/MIRACUM-cbioportal) and FHIR resources. Using this method it is possible to store therapy recommendations and follow up data from Molecular Tumor Boards in an interoperable way.
+FhirSpark is a tool that offers a reversible translation between the JSON sent via REST from [MTB-cBioPortal](https://github.com/PM4Onco/MTB-cbioportal) and FHIR resources. Using this method it is possible to store therapy recommendations and follow up data from Molecular Tumor Boards in an interoperable way.
 
-It is reccommended to deploy and use FhirSaprk within the complete stack of [MIRACUM-cBioPortal](https://github.com/buschlab/MIRACUM-cbioportal).
+It is reccommended to deploy and use FhirSaprk within the complete stack of [MTB-cBioPortal](https://github.com/PM4Onco/MTB-cbioportal).
 
 ## Get started
 
