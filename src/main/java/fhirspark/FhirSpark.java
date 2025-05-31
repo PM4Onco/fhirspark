@@ -33,7 +33,6 @@ import spark.Request;
 import spark.Response;
 import spark.embeddedserver.EmbeddedServers;
 import spark.embeddedserver.jetty.EmbeddedJettyServer;
-import spark.embeddedserver.jetty.JettyHandler;
 import spark.http.matching.MatcherFilter;
 
 import javax.ws.rs.core.Cookie;
@@ -79,9 +78,8 @@ public final class FhirSpark {
             var matcherFilter = new MatcherFilter(routes, staticFilesConfiguration, exceptionMapper, false, b);
             matcherFilter.init(null);
 
-            var handler = new JettyHandler(matcherFilter);
             var factory = new Factory();
-            return new EmbeddedJettyServer(factory, handler);
+            return new EmbeddedJettyServer(factory, true, matcherFilter);
         });
 
         BasicConfigurator.configure();
@@ -393,7 +391,7 @@ public final class FhirSpark {
         });
 
         post("/resources/:patientId/upload", (request, response) -> {
-            if (settings.getLoginRequired() && !validateManipulation(request)) {
+            if (settings.getLoginRequired() && validateManipulation(request) == 0) {
                 response.status(HttpStatus.FORBIDDEN_403);
                 return response;
             }
