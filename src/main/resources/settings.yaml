@@ -16,3 +16,7 @@ regex:
   -
     cbio: ${FHIRSPARK_REGEX_CBIO:-/}
     his: ${FHIRSPARK_REGEX_HIS:-/}
+fileServer: ${FILESERVER_URL:-http://localhost:9000}
+fileServerAccessKey: ${FILESERVER_ACCESS_KEY}
+fileServerSecretKey: ${FILESERVER_SECRET_KEY}
+bucket: ${FILESERVER_BUCKET:-cbioportal}

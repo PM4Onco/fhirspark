@@ -1,5 +1,8 @@
 package fhirspark;
 
+import ca.uhn.fhir.rest.server.exceptions.ResourceGoneException;
+import ca.uhn.fhir.rest.server.exceptions.ResourceNotFoundException;
+import ca.uhn.fhir.rest.server.exceptions.UnprocessableEntityException;
 import com.fasterxml.jackson.core.JsonFactory;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -12,20 +15,29 @@ import fhirspark.resolver.HgncGeneName;
 import fhirspark.resolver.OncoKbDrug;
 import fhirspark.restmodel.CbioportalRest;
 import fhirspark.restmodel.Deletions;
+import fhirspark.restmodel.FileUploadLocation;
 import fhirspark.restmodel.FollowUp;
 import fhirspark.restmodel.GeneticAlteration;
+import fhirspark.restmodel.Image;
+import fhirspark.restmodel.ImageResponse;
 import fhirspark.restmodel.Mtb;
+import fhirspark.restmodel.PatientFileResources;
+import fhirspark.restmodel.PresentationViewModel;
 import fhirspark.settings.ConfigurationLoader;
 import fhirspark.settings.Settings;
-
+import io.minio.errors.MinioException;
+import org.apache.commons.fileupload2.jakarta.servlet6.JakartaServletFileUpload;
 import org.apache.log4j.BasicConfigurator;
 import org.eclipse.jetty.http.HttpStatus;
 import spark.Request;
 import spark.Response;
+import spark.embeddedserver.EmbeddedServers;
+import spark.embeddedserver.jetty.EmbeddedJettyServer;
+import spark.http.matching.MatcherFilter;
 
 import javax.ws.rs.core.Cookie;
-
 import java.io.FileInputStream;
+import java.io.IOException;
 import java.io.InputStream;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
@@ -62,6 +74,14 @@ public final class FhirSpark {
      * @throws Exception Exception if the REST API runs into issues.
      */
     public static void main(final String[] args) throws Exception {
+        EmbeddedServers.add(EmbeddedServers.Identifiers.JETTY, (routes, staticFilesConfiguration, exceptionMapper, b) -> {
+            var matcherFilter = new MatcherFilter(routes, staticFilesConfiguration, exceptionMapper, false, b);
+            matcherFilter.init(null);
+
+            var factory = new Factory();
+            return new EmbeddedJettyServer(factory, true, matcherFilter);
+        });
+
         BasicConfigurator.configure();
         InputStream settingsYaml = ClassLoader.getSystemClassLoader().getResourceAsStream("settings.yaml");
         if (args.length == 1) {
@@ -83,14 +103,19 @@ public final class FhirSpark {
         });
 
         /**
-        *
-        * Checks whether the client has permission to view and manipulate the data of the given patientId
-        *
-        * @param req Incoming Java Spark Request
-        * @param patientId requested patientId
-        * @return FORBIDDEN_403 if not authorized
-        * @return ACCEPTED_202 if authorized
-        */
+         *
+         * Checks whether the client has permission to view and manipulate the data of the given patientId
+         *
+         * @param req Incoming Java Spark Request
+         * @param patientId requested patientId
+         * @return FORBIDDEN_403 if not authorized
+         * @return ACCEPTED_202 if authorized
+         */
+        options("/mtb/:patientId/permission", (req, res) -> {
+            addOptions(req, res);
+            res.header("Access-Control-Allow-Methods", "GET, PUT, DELETE");
+            return res;
+        });
 
         get("/mtb/:patientId/permission", (req, res) -> {
             if (settings.getLoginRequired()) {
@@ -162,11 +187,11 @@ public final class FhirSpark {
             res.status(HttpStatus.OK_200);
             addContent(req, res);
             List<GeneticAlteration> alterations = objectMapper.readValue(req.body(),
-                    new TypeReference<List<GeneticAlteration>>() {
-                    });
+                new TypeReference<List<GeneticAlteration>>() {
+                });
             res.body(
-                    objectMapper.writeValueAsString(jsonFhirMapper
-                        .getTherapyRecommendationsByAlteration(alterations)));
+                objectMapper.writeValueAsString(jsonFhirMapper
+                    .getTherapyRecommendationsByAlteration(alterations)));
             return res.body();
         });
 
@@ -180,8 +205,8 @@ public final class FhirSpark {
             res.status(HttpStatus.OK_200);
             addContent(req, res);
             List<GeneticAlteration> alterations = objectMapper.readValue(req.body(),
-                    new TypeReference<List<GeneticAlteration>>() {
-                    });
+                new TypeReference<List<GeneticAlteration>>() {
+                });
             res.body(objectMapper.writeValueAsString(jsonFhirMapper.getPmidsByAlteration(alterations)));
             return res.body();
         });
@@ -261,12 +286,147 @@ public final class FhirSpark {
             res.status(HttpStatus.OK_200);
             addContent(req, res);
             List<GeneticAlteration> alterations = objectMapper.readValue(req.body(),
-                    new TypeReference<List<GeneticAlteration>>() {
-                    });
+                new TypeReference<List<GeneticAlteration>>() {
+                });
             res.body(
-                    objectMapper.writeValueAsString(jsonFhirMapper
-                        .getFollowUpsByAlteration(alterations)));
+                objectMapper.writeValueAsString(jsonFhirMapper
+                    .getFollowUpsByAlteration(alterations)));
             return res.body();
+        });
+
+        options("/presentation/image", (req, res) -> {
+            addOptions(req, res);
+            res.header("Access-Control-Allow-Methods", "POST");
+            return res;
+        });
+
+        post("/presentation/:patientId/image", (request, response) -> {
+            addContent(request, response);
+
+            var patientId = request.params(":patientId");
+
+            Image image = objectMapper.readValue(request.body(), Image.class);
+
+            try (var fileUploader = new FileClient(settings.getFileServer(), settings.getBucket(), new Credentials(settings.getFileServerAccessKey(), settings.getFileServerSecretKey()))) {
+                var filePath = fileUploader.uploadImage(image, patientId);
+
+                var imageResponse = new ImageResponse(filePath, image.contentType().display());
+
+                response.status(HttpStatus.CREATED_201);
+                return objectMapper.writeValueAsString(imageResponse);
+            } catch (MinioException e) {
+                System.out.println(e.getMessage());
+                response.status(HttpStatus.INTERNAL_SERVER_ERROR_500);
+                return "uploading image failed";
+            }
+        });
+
+        get("/presentation", (request, response) -> {
+            response.status(HttpStatus.OK_200);
+            addContent(request, response);
+
+            response.body(jsonFhirMapper.getPresentationIds());
+            return response.body();
+        });
+
+        get("/presentation/:patientId", (request, response) -> {
+            response.status(HttpStatus.OK_200);
+            addContent(request, response);
+
+            var patientId = request.params(":patientId");
+
+            try {
+                response.body(jsonFhirMapper.loadPresentation(patientId));
+                return response.body();
+            } catch (ResourceGoneException | ResourceNotFoundException e) {
+                response.status(HttpStatus.NOT_FOUND_404);
+                System.out.println(e.getMessage());
+                response.body("not found");
+                return response.body();
+            } catch (UnprocessableEntityException e) {
+                response.status(HttpStatus.INTERNAL_SERVER_ERROR_500);
+                response.body("multiple matches for identifier found");
+                System.out.println(e.getMessage());
+                return response.body();
+            }
+        });
+
+        post("/presentation/:patientId", (request, response) -> {
+            response.status(HttpStatus.OK_200);
+            addContent(request, response);
+
+            var presentation = objectMapper.readValue(request.body(), PresentationViewModel.class);
+            var patientId = request.params(":patientId");
+
+            try {
+                jsonFhirMapper.savePresentation(patientId, presentation);
+                response.body("ok");
+                return response.body();
+            } catch (UnprocessableEntityException e) {
+                response.status(HttpStatus.UNPROCESSABLE_ENTITY_422);
+                response.body("unprocessable entity");
+                return response.body();
+            }
+        });
+
+        options("/presentation/:patientId", (req, res) -> {
+            addOptions(req, res);
+            res.header("Access-Control-Allow-Methods", "DELETE");
+            return res;
+        });
+
+        delete("/presentation/:patientId", (request, response) -> {
+            response.status(HttpStatus.NO_CONTENT_204);
+            addContent(request, response);
+
+            var patientId = request.params(":patientId");
+
+            try {
+                jsonFhirMapper.deletePresentation(patientId);
+                return response;
+            } catch (UnprocessableEntityException e) {
+                response.status(HttpStatus.UNPROCESSABLE_ENTITY_422);
+                return "unprocessable entity";
+            }
+        });
+
+        post("/resources/:patientId/upload", (request, response) -> {
+            if (settings.getLoginRequired() && validateManipulation(request) == 0) {
+                response.status(HttpStatus.FORBIDDEN_403);
+                return response;
+            }
+
+            addContent(request, response);
+
+            var patientId = request.params(":patientId");
+
+            if (!JakartaServletFileUpload.isMultipartContent(request.raw())) {
+                response.status(HttpStatus.BAD_REQUEST_400);
+                return "bad request";
+            }
+
+            try (var client = new FileClient(settings.getFileServer(), settings.getBucket(), new Credentials(settings.getFileServerAccessKey(), settings.getFileServerSecretKey()))) {
+                response.status(HttpStatus.CREATED_201);
+                return objectMapper.writeValueAsString(new FileUploadLocation(client.uploadFile(patientId, request.raw())));
+            } catch (MinioException | IOException e) {
+                System.out.println(e.getMessage());
+                response.status(HttpStatus.INTERNAL_SERVER_ERROR_500);
+                return "internal server error";
+            }
+        });
+
+        get("/resources/:patientId", (request, response) -> {
+            addContent(request, response);
+
+            var patientId = request.params(":patientId");
+
+            try (var client = new FileClient(settings.getFileServer(), settings.getBucket(), new Credentials(settings.getFileServerAccessKey(), settings.getFileServerSecretKey()))) {
+                return objectMapper.writeValueAsString(new PatientFileResources(client.listFiles(patientId)));
+            } catch (MinioException | IOException e) {
+                System.out.println(e.getMessage());
+                response.status(HttpStatus.INTERNAL_SERVER_ERROR_500);
+                return "internal server error";
+            }
         });
     }
 

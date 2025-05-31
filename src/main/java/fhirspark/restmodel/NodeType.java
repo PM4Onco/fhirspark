@@ -1,0 +1,24 @@
+package fhirspark.restmodel;
+
+import com.fasterxml.jackson.annotation.JsonProperty;
+
+public enum NodeType {
+    @JsonProperty("image")
+    IMAGE,
+    @JsonProperty("text")
+    TEXT,
+    @JsonProperty("html")
+    HTML,
+    @JsonProperty("mutationTable")
+    MUTATION_TABLE,
+    @JsonProperty("timeline")
+    TIMELINE,
+    @JsonProperty("therapyRecommendations")
+    THERAPY_RECOMMENDATIONS,
+    @JsonProperty("rectangle")
+    RECTANGLE,
+    @JsonProperty("fusionTable")
+    FUSION_TABLE,
+    @JsonProperty("cnaTable")
+    CNA_TABLE,
+}

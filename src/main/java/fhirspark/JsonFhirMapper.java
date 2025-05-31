@@ -5,6 +5,8 @@ import ca.uhn.fhir.parser.DataFormatException;
 import ca.uhn.fhir.rest.client.api.IGenericClient;
 import ca.uhn.fhir.rest.gclient.ReferenceClientParam;
 import ca.uhn.fhir.rest.gclient.TokenClientParam;
+import ca.uhn.fhir.rest.server.exceptions.ResourceGoneException;
+import ca.uhn.fhir.rest.server.exceptions.ResourceNotFoundException;
 import ca.uhn.fhir.rest.server.exceptions.UnprocessableEntityException;
 import com.fasterxml.jackson.core.JsonFactory;
 import com.fasterxml.jackson.core.JsonProcessingException;
@@ -14,12 +16,19 @@ import fhirspark.adapter.MtbAdapter;
 import fhirspark.adapter.TherapyRecommendationAdapter;
 import fhirspark.definitions.GenomicsReportingEnum;
 import fhirspark.definitions.Hl7TerminologyEnum;
+import fhirspark.definitions.Presentation;
 import fhirspark.definitions.UriEnum;
 import fhirspark.restmodel.CbioportalRest;
 import fhirspark.restmodel.Deletions;
 import fhirspark.restmodel.FollowUp;
 import fhirspark.restmodel.GeneticAlteration;
+import fhirspark.restmodel.Image;
+import fhirspark.restmodel.ImageResponse;
 import fhirspark.restmodel.Mtb;
+import fhirspark.restmodel.NodeType;
+import fhirspark.restmodel.Position;
+import fhirspark.restmodel.PresentationViewModel;
+import fhirspark.restmodel.SlideNode;
 import fhirspark.restmodel.TherapyRecommendation;
 import fhirspark.settings.Settings;
 import java.io.FileWriter;
@@ -33,18 +42,38 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import org.hl7.fhir.instance.model.api.IAnyResource;
+import org.hl7.fhir.r4.model.Basic;
+import org.hl7.fhir.r4.model.Binary;
 import org.hl7.fhir.r4.model.Bundle;
 import org.hl7.fhir.r4.model.Bundle.BundleEntryComponent;
+import org.hl7.fhir.r4.model.DecimalType;
 import org.hl7.fhir.r4.model.DiagnosticReport;
 import org.hl7.fhir.r4.model.IdType;
 import org.hl7.fhir.r4.model.Identifier;
 import org.hl7.fhir.r4.model.Identifier.IdentifierUse;
+import org.hl7.fhir.r4.model.IntegerType;
 import org.hl7.fhir.r4.model.MedicationStatement;
 import org.hl7.fhir.r4.model.Observation;
 import org.hl7.fhir.r4.model.Patient;
 import org.hl7.fhir.r4.model.Reference;
 import org.hl7.fhir.r4.model.RelatedArtifact;
 import org.hl7.fhir.r4.model.RelatedArtifact.RelatedArtifactType;
+import org.hl7.fhir.r4.model.StringType;
+
+import java.io.FileWriter;
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.Comparator;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.NoSuchElementException;
+import java.util.Objects;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 /**
  * Fulfils the persistence in HL7 FHIR resources.
@@ -65,7 +94,6 @@ public class JsonFhirMapper {
     private ObjectMapper objectMapper = new ObjectMapper(new JsonFactory());
 
     /**
-     *
      * Constructs a new FHIR mapper and stores the required configuration.
      *
      * @param settings Settings object with containing configuration
@@ -83,6 +111,10 @@ public class JsonFhirMapper {
         JsonFhirMapper.mtbUri = settings.getDiagnosticReportSystem();
         JsonFhirMapper.responseUri = settings.getResponseSystem();
 
+    }
+
+    private static boolean hasMultipleMatches(Bundle bundle) {
+        return bundle.getEntry().size() > 1;
     }
 
     /**
@@ -113,10 +145,9 @@ public class JsonFhirMapper {
         List<BundleEntryComponent> diagnosticReports = bDiagnosticReports.getEntry();
 
         for (int i = 0; i < diagnosticReports.size(); i++) {
-            if (!(diagnosticReports.get(i).getResource() instanceof DiagnosticReport)) {
+            if (!(diagnosticReports.get(i).getResource() instanceof DiagnosticReport diagnosticReport)) {
                 continue;
             }
-            DiagnosticReport diagnosticReport = (DiagnosticReport) diagnosticReports.get(i).getResource();
             mtbs.add(MtbAdapter.toJson(settings.getRegex(), patientId, diagnosticReport));
 
         }
@@ -160,6 +191,7 @@ public class JsonFhirMapper {
     /**
      * Retrieves MTB data from FHIR server and transforms it into JSON format for
      * cBioPortal.
+     *
      * @param patientId id of the patient.
      * @return JSON representation of the MTB data.
      * @throws JsonProcessingException if the JSON representation could not be created.
@@ -188,10 +220,9 @@ public class JsonFhirMapper {
         List<BundleEntryComponent> medicationStatements = bMedicationStatements.getEntry();
 
         for (int i = 0; i < medicationStatements.size(); i++) {
-            if (!(medicationStatements.get(i).getResource() instanceof MedicationStatement)) {
+            if (!(medicationStatements.get(i).getResource() instanceof MedicationStatement medicationStatement)) {
                 continue;
             }
-            MedicationStatement medicationStatement = (MedicationStatement) medicationStatements.get(i).getResource();
             followUps.add(FollowUpAdapter.toJson(settings.getRegex(), medicationStatement));
 
         }
@@ -230,8 +261,183 @@ public class JsonFhirMapper {
 
     }
 
+    public String uploadImage(final Image image) throws JsonProcessingException {
+        var bundle = new Bundle();
+        bundle.setType(Bundle.BundleType.TRANSACTION);
+
+        var binary = new Binary();
+        binary.setId(IdType.newRandomUuid());
+        binary.setContentType(image.contentType().display());
+        binary.setData(image.data().getBytes(StandardCharsets.UTF_8));
+
+        bundle.addEntry()
+            .setFullUrl(binary.getIdElement().getValue())
+            .setResource(binary)
+            .getRequest()
+            .setUrl("Binary")
+            .setMethod(Bundle.HTTPVerb.POST);
+
+        var bundledResponse = client.transaction().withBundle(bundle).execute();
+        var response = new ImageResponse(
+            bundledResponse.getEntryFirstRep().getResponse().getLocation(),
+            image.contentType().display()
+        );
+
+        return objectMapper.writeValueAsString(response);
+    }
+
+    public void savePresentation(final String patientId, final PresentationViewModel presentation) {
+        var bundle = createTransactionBundle();
+        var presentationResource = createPresentationResource();
+        var nodes = createNodesForPresentationFromViewModel(presentation);
+
+        addPatientIdIdentifier(presentationResource, patientId);
+        presentationResource.setNodes(nodes);
+        setupBundleEntry(bundle, presentationResource, patientId);
+
+        executeBundleTransaction(bundle);
+        removeUnusedImages(patientId, presentation);
+    }
+
+    private Bundle createTransactionBundle() {
+        var bundle = new Bundle();
+        bundle.setType(Bundle.BundleType.TRANSACTION);
+
+        return bundle;
+    }
+
+    private Presentation createPresentationResource() {
+        var presentation = new Presentation();
+        presentation.setId(IdType.newRandomUuid());
+
+        return presentation;
+    }
+
+    private void addPatientIdIdentifier(final Basic resource, final String patientId) {
+        var identifier = resource.addIdentifier();
+        identifier.setSystem(patientUri).setValue("presentation_" + patientId);
+        identifier.setUse(IdentifierUse.OFFICIAL);
+        identifier.getType().addCoding(Hl7TerminologyEnum.MR.toCoding());
+    }
+
+    private List<Presentation.Node> createNodesForPresentationFromViewModel(final PresentationViewModel presentationRequest) {
+        return presentationRequest.slides().entrySet().stream().flatMap(slide -> {
+            var slideId = slide.getKey();
+            var nodesInSlide = slide.getValue();
+            return nodesInSlide.stream().map(node -> new Presentation.Node(
+                new IntegerType(slideId),
+                new StringType(node.id()),
+                new IntegerType(node.position().left()),
+                new IntegerType(node.position().top()),
+                node.position().width() == null ? null : new IntegerType(node.position().width()),
+                node.position().height() == null ? null : new IntegerType(node.position().height()),
+                node.position().scale() == null ? null : new DecimalType(node.position().scale()),
+                new StringType(node.type().toString()),
+                new StringType(node.value())));
+        }).toList();
+    }
+
+    private void setupBundleEntry(final Bundle bundle, final Presentation presentation, final String patientId) {
+        var identifier = presentation.getIdentifierFirstRep();
+        bundle.addEntry().setFullUrl(presentation.getIdElement().getValue()).setResource(presentation).getRequest()
+            .setUrl("Basic?identifier=" + identifier.getSystem() + "|" + identifier.getValue())
+            .setMethod(Bundle.HTTPVerb.PUT);
+
+    }
+
+    public void executeBundleTransaction(final Bundle bundle) {
+        client.transaction().withBundle(bundle).execute();
+    }
+
+    private void removeUnusedImages(final String patientId, final PresentationViewModel presentation) {
+        var imagePaths = presentation.slides().values().stream().flatMap(Collection::stream).filter(node -> node.type() == NodeType.IMAGE).map(SlideNode::value).toList();
+
+        try (var client = new FileClient(settings.getFileServer(), settings.getBucket(), new Credentials(settings.getFileServerAccessKey(), settings.getFileServerSecretKey()))) {
+            client.removeUnusedImages(patientId, imagePaths);
+        } catch (Exception e) {
+            throw new RuntimeException(e);
+        }
+    }
+
+    public String getPresentationIds() {
+        var bundle = client.search()
+            .forResource(Presentation.class)
+            .returnBundle(Bundle.class).execute();
+
+        var entries = bundle.getEntry().stream().map(entry -> {
+            try {
+                return ((Basic) entry.getResource()).getIdentifier().getFirst().getValue();
+            } catch (NoSuchElementException e) {
+                return null;
+            }
+        }).filter(Objects::nonNull).map(id -> {
+            var parts = id.split("_");
+            return parts[parts.length - 1];
+        }).toList();
+
+        try {
+            return objectMapper.writeValueAsString(entries);
+        } catch (JsonProcessingException e) {
+            return "";
+        }
+    }
+
+    public String loadPresentation(final String patientId) throws ResourceNotFoundException, ResourceGoneException, UnprocessableEntityException, JsonProcessingException {
+        var bundle = findPresentationByPatientId(patientId);
+
+        if (hasMultipleMatches(bundle)) {
+            throw new UnprocessableEntityException("identifier has multiple matches");
+        }
+
+        var presentation = getPresentationFromBundle(bundle);
+
+        if (presentation == null) {
+            throw new ResourceNotFoundException("no presentation for patentid found");
+        }
+
+        var viewModel = createViewModelFromPresentation(presentation);
+
+        return toJSON(viewModel);
+    }
+
+    private String toJSON(PresentationViewModel viewModel) throws JsonProcessingException {
+        return objectMapper.writeValueAsString(viewModel);
+    }
+
+    private Bundle findPresentationByPatientId(final String patientId) {
+        var prefixedPatientId = "presentation_" + patientId;
+        return client.search()
+            .forResource(Presentation.class)
+            .where(new TokenClientParam("identifier").exactly().systemAndCode(patientUri, prefixedPatientId))
+            .returnBundle(Bundle.class).execute();
+    }
+
+    private Presentation getPresentationFromBundle(Bundle bundle) {
+        return (Presentation) bundle.getEntryFirstRep().getResource();
+    }
+
+    private PresentationViewModel createViewModelFromPresentation(Presentation presentation) {
+        var nodesGroupedBySlideId = presentation.getNodes().stream().collect(Collectors.groupingBy(node -> node.getSlideId().getValue()));
+        var slides = new HashMap<Integer, List<SlideNode>>();
+        nodesGroupedBySlideId.forEach((slideId, nodes) -> {
+            var slideNodes = nodes.stream().map(node -> new SlideNode(node.getNodeId().getValue(), new Position(node.getLeft().getValue().longValue(), node.getTop().getValue().longValue(), node.getWidth().getValue() != null ? node.getWidth().getValue().longValue() : null, node.getHeight().getValue() != null ? node.getHeight().getValue().longValue() : null, node.getScale().getValue() != null ? node.getScale().getValue().doubleValue() : null), NodeType.valueOf(node.getType().getValue()), node.getValue().getValue())).toList();
+            slides.put(slideId, slideNodes);
+        });
+        return new PresentationViewModel(slides);
+    }
+
+    public void deletePresentation(final String patientId) {
+        var bundle = new Bundle();
+        var presentation = new Presentation();
+        addPatientIdIdentifier(presentation, patientId);
+
+        bundle.addEntry().setFullUrl(presentation.getIdElement().getValue()).setResource(presentation).getRequest()
+            .setUrl("Basic?identifier=" + patientUri + "|presentation_" + patientId)
+            .setMethod(Bundle.HTTPVerb.DELETE);
+        client.transaction().withBundle(bundle).execute();
+    }
+
     /**
-     *
      * @param patientId id of the patient.
      * @param deletions entries that should be deleted. Either MTB or therapy
      *                  recommendation.
