@@ -15,13 +15,13 @@ import java.io.Serial;
 import java.util.ArrayList;
 import java.util.List;
 
-@ResourceDef(name = "Basic", profile = "http://example.com/StructureDefinition/mtb-presentation")
+@ResourceDef(name = "Basic", profile = "https://cbioportal.imi.med.fau.de/fhir/StructureDefinition/mtb-presentation")
 public class Presentation extends Basic {
     @Serial
     private static final long serialVersionUID = 1L;
 
     @Child(name = "slides")
-    @Extension(url = "http://example.com/StructureDefinition/mtb-presentation-node", definedLocally = false)
+    @Extension(url = "https://cbioportal.imi.med.fau.de/fhir/StructureDefinition/mtb-presentation-node", definedLocally = false)
     private List<Node> nodes;
 
     public List<Node> getNodes() {
@@ -45,39 +45,39 @@ public class Presentation extends Basic {
         private static final long serialVersionUID = 1792249628585619265L;
 
         @Child(name = "slideId")
-        @Extension(url = "http://example.com/StructureDefinition/mtb-presentation-slide-id", definedLocally = false)
+        @Extension(url = "https://cbioportal.imi.med.fau.de/fhir/StructureDefinition/mtb-presentation-slide-id", definedLocally = false)
         private IntegerType slideId;
 
         @Child(name = "nodeId")
-        @Extension(url = "http://example.com/StructureDefinition/mtb-presentation-node-id", definedLocally = false)
+        @Extension(url = "https://cbioportal.imi.med.fau.de/fhir/StructureDefinition/mtb-presentation-node-id", definedLocally = false)
         private StringType nodeId;
 
         @Child(name = "left")
-        @Extension(url = "http://example.com/StructureDefinition/mtb-presentation-node-left", definedLocally = false)
+        @Extension(url = "https://cbioportal.imi.med.fau.de/fhir/StructureDefinition/mtb-presentation-node-left", definedLocally = false)
         private IntegerType left;
 
         @Child(name = "top")
-        @Extension(url = "http://example.com/StructureDefinition/mtb-presentation-node-top", definedLocally = false)
+        @Extension(url = "https://cbioportal.imi.med.fau.de/fhir/StructureDefinition/mtb-presentation-node-top", definedLocally = false)
         private IntegerType top;
 
         @Child(name = "width")
-        @Extension(url = "http://example.com/StructureDefinition/mtb-presentation-node-width", definedLocally = false)
+        @Extension(url = "https://cbioportal.imi.med.fau.de/fhir/StructureDefinition/mtb-presentation-node-width", definedLocally = false)
         private IntegerType width;
 
         @Child(name = "height")
-        @Extension(url = "http://example.com/StructureDefinition/mtb-presentation-node-height", definedLocally = false)
+        @Extension(url = "https://cbioportal.imi.med.fau.de/fhir/StructureDefinition/mtb-presentation-node-height", definedLocally = false)
         private IntegerType height;
 
         @Child(name = "scale")
-        @Extension(url = "http://example.com/StructureDefinition/mtb-presentation-node-scale", definedLocally = false)
+        @Extension(url = "https://cbioportal.imi.med.fau.de/fhir/StructureDefinition/mtb-presentation-node-scale", definedLocally = false)
         private DecimalType scale;
 
         @Child(name = "type")
-        @Extension(url = "http://example.com/StructureDefinition/mtb-presentation-node-type", definedLocally = false)
+        @Extension(url = "https://cbioportal.imi.med.fau.de/fhir/StructureDefinition/mtb-presentation-node-type", definedLocally = false)
         private StringType type;
 
         @Child(name = "value")
-        @Extension(url = "http://example.com/StructureDefinition/mtb-presentation-node-value", definedLocally = false)
+        @Extension(url = "https://cbioportal.imi.med.fau.de/fhir/StructureDefinition/mtb-presentation-node-value", definedLocally = false)
         private StringType value;
 
         public Node() {
